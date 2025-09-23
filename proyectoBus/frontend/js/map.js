@@ -24,6 +24,7 @@ L.polyline([
 async function consultarRuta() {
   const origen = document.getElementById('origen').value;
   const destino = document.getElementById('destino').value;
+
   const res = await fetch('http://localhost:3000/api/ruta', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -33,40 +34,35 @@ async function consultarRuta() {
   const data = await res.json();
   if (!res.ok) return alert(data.mensaje);
 
+  // Mostrar resultado en texto
   document.getElementById('resultado').innerHTML =
     data.ruta.map(r => `<p>${r.linea}: ${r.desde} ➝ ${r.hasta}</p>`).join('');
 
+  // Limpiar el mapa
   layerGroup.clearLayers();
-  const colores = ['blue', 'green', 'red', 'orange'];
 
-  let colorIndex = 0;
+  // Geocodificar todos los puntos
+  let puntos = [];
   for (const tramo of data.ruta) {
     const coordDesde = await geocodificar(tramo.desde);
     const coordHasta = await geocodificar(tramo.hasta);
 
-    const orsRes = await fetch(`https://api.openrouteservice.org/v2/directions/foot-walking/geojson`, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImExNmE5YTc4NTBhZDQ1Mjc4N2NmMzk1MGYyMWFhMzNiIiwiaCI6Im11cm11cjY0In0=',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        coordinates: [
-          [coordDesde[1], coordDesde[0]], // lon, lat
-          [coordHasta[1], coordHasta[0]]
-        ]
-      })
-    });
+    puntos.push(coordDesde);
+    puntos.push(coordHasta);
 
-    const orsData = await orsRes.json();
-    if (orsData && orsData.features) {
-      L.geoJSON(orsData, {
-        style: { color: colores[colorIndex % colores.length], weight: 4 }
-      }).addTo(layerGroup);
-    }
-
+    // Marcadores de inicio/fin
     L.marker(coordDesde).addTo(layerGroup).bindPopup("Inicio: " + tramo.desde);
     L.marker(coordHasta).addTo(layerGroup).bindPopup("Fin: " + tramo.hasta);
-    colorIndex++;
   }
+
+  // Eliminar duplicados de coordenadas
+  puntos = puntos.filter((p, i, arr) =>
+    i === arr.findIndex(q => q[0] === p[0] && q[1] === p[1])
+  );
+
+  // Dibujar la polilínea
+  const polyline = L.polyline(puntos, { color: 'blue', weight: 5 }).addTo(layerGroup);
+
+  // Ajustar el mapa a la ruta
+  map.fitBounds(polyline.getBounds());
 }
